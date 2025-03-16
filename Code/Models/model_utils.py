@@ -1,0 +1,90 @@
+import numpy as np
+from sklearn.decomposition import SparsePCA
+from Utils.utils import seed_everything
+
+class FTPLModel:
+    def __init__(self, N: int, k: int, eta: float, feature_extraction: str="pca", sample_gamma_once: bool=True, seed: int=42):
+        """
+        Follow-The-Perturbed-Leader (FTPL) Model
+
+        Parameters:
+        N                    : Size of the universe
+        k                    : Cache capacity (number of files to cache)
+        eta                  : Learning rate
+        feature_extraction   : Method to use for feature extraction ("pca" or "sparse_pca")
+        sample_gamma_once    : Whether to sample \( \Gamma \) once or at every instant
+        seed                 : Random seed for reproducibility
+        """
+        self.N = N
+        self.k = k
+        self.eta = eta
+        self.sample_gamma_once = sample_gamma_once
+        self.R = np.zeros((N, N))  # Reward matrix
+        seed_everything(seed)
+
+        feature_extraction_methods = {
+            "pca": self._find_max_eigenvector,
+            "sparse_pca": self._find_sparse_pca_vector
+        }
+
+        if feature_extraction not in feature_extraction_methods:
+            raise ValueError("Invalid feature_extraction method. Choose either 'pca' or 'sparse_pca'.")
+        
+        self.feature_extraction_func = feature_extraction_methods[feature_extraction]
+        
+        if sample_gamma_once:
+            self.Gamma = np.random.normal(0, 1, (N, N))  # Sample once
+
+    def _find_max_eigenvector(self):
+        eigenvalues, eigenvectors = np.linalg.eig(self.R)
+        max_index = np.argmax(eigenvalues)
+        return eigenvectors[:, max_index]
+
+    def _find_sparse_pca_vector(self, n_components=1, alpha=1):
+        spca = SparsePCA(n_components=n_components, alpha=alpha, random_state=42)
+        spca.fit(self.R)
+        return spca.components_[0]
+
+    def _madow_sampling(self, v):
+        """Madow's Sampling Scheme to obtain y with ||y||_1 = k from v"""
+        v = v - np.max(v)  # Stabilize before applying softmax
+        p = np.exp(v) / np.sum(np.exp(v))  # Softmax normalization
+        Pi = np.cumsum(p)
+        U = np.random.uniform(0, 1)
+        S = set()
+        for i in range(self.k):
+            j = np.searchsorted(Pi, U + i / self.k)
+            if j >= len(v):  # If index is out of range, select randomly
+                j = np.random.randint(0, len(v))
+            S.add(j)
+
+        y = np.zeros(self.N)
+        y[list(S)] = 1
+        
+        return y
+
+    def _validate_l1_norm(self, y):
+        """Ensure L1 norm of y is exactly k"""
+        while np.sum(y) != self.k:
+            diff = self.k - int(np.sum(y))
+            if diff > 0:
+                additional_indices = np.random.choice(np.where(y == 0)[0], size=diff, replace=False)
+                y[additional_indices] = 1
+            else:
+                remove_indices = np.random.choice(np.where(y == 1)[0], size=-diff, replace=False)
+                y[remove_indices] = 0
+        return y
+
+    def update(self, x_t1, x_t2):
+        """Update reward matrix R"""
+        self.R += np.outer(x_t1, x_t2) + np.outer(x_t2, x_t1) - np.diag(x_t1 * x_t2)
+
+    def get_cache(self):
+        """Select the top k elements based on perturbed reward matrix"""
+        if not self.sample_gamma_once:
+            self.Gamma = np.random.normal(0, 1, (self.N, self.N))  # Resample every step
+        perturbed_R = self.R + self.eta * self.Gamma
+        
+        v = self.feature_extraction_func()
+        y = self._madow_sampling(v)
+        return self._validate_l1_norm(y)
