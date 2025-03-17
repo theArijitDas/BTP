@@ -1,7 +1,7 @@
 import numpy as np
 import random
 from typing import Union, List
-from Utils.utils import seed_everything
+from Utils.utils import seed_everything, one_hot_encode
 
 
 def uniform_generator(seed):
@@ -79,17 +79,12 @@ class RandomDataLoader:
         
         self.generator = mixed_generator(seed, dist) if len(dist) > 1 else get_generator[dist[0]](seed)
 
-    def _one_hot_encode(self, value):
-        one_hot = np.zeros(self.N, dtype=int)
-        one_hot[value] = 1
-        return one_hot
-
     def get_data(self):
         """Returns two randomly generated integers (or one-hot encoded vectors)"""
         x1 = self.generator(self.N)
         x2 = self.generator(self.N)
         if self.one_hot:
-            return self._one_hot_encode(x1), self._one_hot_encode(x2)
+            return one_hot_encode(x1, self.N), one_hot_encode(x2, self.N)
         return x1, x2
 
     def __call__(self):

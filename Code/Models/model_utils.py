@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.decomposition import SparsePCA
-from Utils.utils import seed_everything
+from Utils.utils import seed_everything, one_hot_encode
 
 class FTPLModel:
     def __init__(self, N: int, k: int, eta: float, feature_extraction: str="pca", sample_gamma_once: bool=True, seed: int=42):
@@ -35,17 +35,31 @@ class FTPLModel:
         if sample_gamma_once:
             self.Gamma = np.random.normal(0, 1, (N, N))  # Sample once
 
-    def _find_max_eigenvector(self):
-        eigenvalues, eigenvectors = np.linalg.eig(self.R)
+    def _find_max_eigenvector(self, R: np.ndarray) -> np.ndarray:
+        eigenvalues, eigenvectors = np.linalg.eig(R)
         max_index = np.argmax(eigenvalues)
         return eigenvectors[:, max_index]
 
-    def _find_sparse_pca_vector(self, n_components=1, alpha=1):
+    def _find_sparse_pca_vector(self, R: np.ndarray, n_components: int=1, alpha: float=1) -> np.ndarray:
         spca = SparsePCA(n_components=n_components, alpha=alpha, random_state=42)
-        spca.fit(self.R)
+        spca.fit(R)
         return spca.components_[0]
+    
+    def _top_k_binary_vector(self, v: np.ndarray, k: int) -> np.ndarray:
+        """Returns a binary vector y, where the indices corresponding to the top-k elements of v are set to 1."""
+        if k <= 0:
+            return np.zeros_like(v, dtype=int)
+        
+        # Get indices of the top-k elements
+        top_k_indices = np.argpartition(-v, k)[:k]  # argpartition for efficient selection
+        
+        # Create binary vector
+        y = np.zeros_like(v, dtype=int)
+        y[top_k_indices] = 1
+        
+        return y
 
-    def _madow_sampling(self, v):
+    def _madow_sampling(self, v: np.ndarray) -> np.ndarray:
         """Madow's Sampling Scheme to obtain y with ||y||_1 = k from v"""
         v = v - np.max(v)  # Stabilize before applying softmax
         p = np.exp(v) / np.sum(np.exp(v))  # Softmax normalization
@@ -63,7 +77,7 @@ class FTPLModel:
         
         return y
 
-    def _validate_l1_norm(self, y):
+    def _validate_l1_norm(self, y: np.ndarray) -> np.ndarray:
         """Ensure L1 norm of y is exactly k"""
         while np.sum(y) != self.k:
             diff = self.k - int(np.sum(y))
@@ -75,16 +89,28 @@ class FTPLModel:
                 y[remove_indices] = 0
         return y
 
-    def update(self, x_t1, x_t2):
+    def update(self, x_t1: int|np.ndarray, x_t2: int|np.ndarray):
         """Update reward matrix R"""
+        if isinstance(x_t1, int): x_t1 = one_hot_encode(x_t1, self.N)
+        if isinstance(x_t2, int): x_t2 = one_hot_encode(x_t2, self.N)
+
         self.R += np.outer(x_t1, x_t2) + np.outer(x_t2, x_t1) - np.diag(x_t1 * x_t2)
 
-    def get_cache(self):
+    def get_cache(self) -> np.ndarray:
         """Select the top k elements based on perturbed reward matrix"""
         if not self.sample_gamma_once:
             self.Gamma = np.random.normal(0, 1, (self.N, self.N))  # Resample every step
         perturbed_R = self.R + self.eta * self.Gamma
         
-        v = self.feature_extraction_func()
+        v = self.feature_extraction_func(perturbed_R)
         y = self._madow_sampling(v)
+        return self._validate_l1_norm(y)
+    
+    def __call__(self) -> np.ndarray:
+        return self.get_cache()
+    
+    def get_best_offline_stationary(self) -> np.ndarray:
+        v = self.feature_extraction_func(self.R)
+        # y = self._madow_sampling(v)
+        y = self._top_k_binary_vector(v, self.k)
         return self._validate_l1_norm(y)
