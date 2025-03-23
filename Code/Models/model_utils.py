@@ -62,14 +62,12 @@ class FTPLModel:
     def _madow_sampling(self, v: np.ndarray) -> np.ndarray:
         """Madow's Sampling Scheme to obtain y with ||y||_1 = k from v"""
         v = v - np.max(v)  # Stabilize before applying softmax
-        p = np.exp(v) / np.sum(np.exp(v))  # Softmax normalization
+        p = self.k  * np.exp(v) / np.sum(np.exp(v))  # Softmax normalization scaled by self.k
         Pi = np.cumsum(p)
         U = np.random.uniform(0, 1)
         S = set()
         for i in range(self.k):
-            j = np.searchsorted(Pi, U + i / self.k)
-            if j >= len(v):  # If index is out of range, select randomly
-                j = np.random.randint(0, len(v))
+            j = np.searchsorted(Pi, U + i)
             S.add(j)
 
         y = np.zeros(self.N)
