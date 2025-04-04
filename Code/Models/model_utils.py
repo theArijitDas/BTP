@@ -1,6 +1,37 @@
+from itertools import combinations
 import numpy as np
 from sklearn.decomposition import SparsePCA
 from Utils.utils import seed_everything, one_hot_encode
+
+class RewardMatrixHandler:
+    def __init__(self, N: int):
+        """
+        Base class for managing and updating the reward matrix R.
+
+        Parameters:
+        N : int
+            Size of the square matrix R (NxN).
+        """
+        self.N = N
+        self.R = np.zeros((N, N))  # Reward matrix
+
+    def update(self, x_t1: int | np.ndarray, x_t2: int | np.ndarray):
+        """
+        Update the reward matrix R based on observed interactions.
+
+        Parameters:
+        x_t1 : int | np.ndarray
+            Either an integer (one-hot encoded internally) or a binary vector.
+        x_t2 : int | np.ndarray
+            Either an integer (one-hot encoded internally) or a binary vector.
+        """
+        if isinstance(x_t1, int):
+            x_t1 = one_hot_encode(x_t1, self.N)
+        if isinstance(x_t2, int):
+            x_t2 = one_hot_encode(x_t2, self.N)
+
+        self.R += np.outer(x_t1, x_t2) + np.outer(x_t2, x_t1) - np.diag(x_t1 * x_t2)
+
 
 class FTPLModel:
     def __init__(self, N: int, k: int, eta: float, feature_extraction: str="pca", sample_gamma_once: bool=True, seed: int=42):
@@ -19,7 +50,6 @@ class FTPLModel:
         self.k = k
         self.eta = eta
         self.sample_gamma_once = sample_gamma_once
-        self.R = np.zeros((N, N))  # Reward matrix
         seed_everything(seed)
 
         feature_extraction_methods = {
@@ -87,28 +117,62 @@ class FTPLModel:
                 y[remove_indices] = 0
         return y
 
-    def update(self, x_t1: int|np.ndarray, x_t2: int|np.ndarray):
-        """Update reward matrix R"""
-        if isinstance(x_t1, int): x_t1 = one_hot_encode(x_t1, self.N)
-        if isinstance(x_t2, int): x_t2 = one_hot_encode(x_t2, self.N)
-
-        self.R += np.outer(x_t1, x_t2) + np.outer(x_t2, x_t1) - np.diag(x_t1 * x_t2)
-
-    def get_cache(self) -> np.ndarray:
+    def get_cache(self,R) -> np.ndarray:
         """Select the top k elements based on perturbed reward matrix"""
         if not self.sample_gamma_once:
             self.Gamma = np.random.normal(0, 1, (self.N, self.N))  # Resample every step
-        perturbed_R = self.R + self.eta * self.Gamma
+        perturbed_R = R + self.eta * self.Gamma
         
         v = self.feature_extraction_func(perturbed_R)
         y = self._madow_sampling(v)
         return self._validate_l1_norm(y)
     
-    def __call__(self) -> np.ndarray:
-        return self.get_cache()
+    def __call__(self, R) -> np.ndarray:
+        return self.get_cache(R)
+
+
+class BestStationaryOptimal:
+    def __init__(self, N, K):
+        """
+        Initialize the optimizer with the matrix size (N) and number of ones (K) in Y.
+
+        Parameters:
+        N (int): Size of the square matrix R (NxN).
+        K (int): Number of ones in the binary vector Y.
+        """
+        if K > N or K < 0:
+            raise ValueError("K must be between 0 and N (inclusive).")
+        
+        self.N = N
+        self.K = K
+
+    def get_best_Y(self, R):
+        """
+        Given an NxN matrix R, find the binary vector Y that maximizes Y' R Y.
+
+        Parameters:
+        R (numpy.ndarray): The input square matrix of shape (N, N).
+
+        Returns:
+        numpy.ndarray: The optimal binary vector Y of shape (N,).
+        """
+        max_value = float('-inf')
+        best_Y = None
+
+        # Iterate over all subsets of size K
+        for indices in combinations(range(self.N), self.K):
+            Y = np.zeros(self.N)
+            Y[list(indices)] = 1
+
+            # Compute Y'RY
+            value = Y @ R @ Y
+
+            # Update max_value and best_Y
+            if value > max_value:
+                max_value = value
+                best_Y = Y.copy()
+
+        return best_Y
     
-    def get_best_offline_stationary(self) -> np.ndarray:
-        v = self.feature_extraction_func(self.R)
-        # y = self._madow_sampling(v)
-        y = self._top_k_binary_vector(v, self.k)
-        return self._validate_l1_norm(y)
+    def __call__(self, R):
+        return self.get_best_Y(self, R)
