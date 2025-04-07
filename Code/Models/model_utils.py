@@ -132,7 +132,7 @@ class FTPLModel:
 
 
 class BestStationaryOptimal:
-    def __init__(self, N, K):
+    def __init__(self, N, k):
         """
         Initialize the optimizer with the matrix size (N) and number of ones (K) in Y.
 
@@ -140,11 +140,11 @@ class BestStationaryOptimal:
         N (int): Size of the square matrix R (NxN).
         K (int): Number of ones in the binary vector Y.
         """
-        if K > N or K < 0:
+        if k > N or k < 0:
             raise ValueError("K must be between 0 and N (inclusive).")
         
         self.N = N
-        self.K = K
+        self.K = k
 
     def get_best_Y(self, R):
         """
@@ -175,4 +175,4 @@ class BestStationaryOptimal:
         return best_Y
     
     def __call__(self, R):
-        return self.get_best_Y(self, R)
+        return self.get_best_Y(R)
