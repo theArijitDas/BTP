@@ -1,2 +1,4 @@
 Code/ignore
 venv/
+Results/
+*/*/__pycache__/
