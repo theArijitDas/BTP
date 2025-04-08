@@ -1,4 +1,5 @@
 Code/ignore
+Code/inference.ipynb
 venv/
 Results/
 */*/__pycache__/
