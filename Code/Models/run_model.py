@@ -55,7 +55,10 @@ def run_model(N: int, k: int, data:str, dist: Union[str, List[str]], params_list
         #------------------  Save Output ------------------#
         result_dict = {}
 
-        result_dict.update({"dist": dist if data=="synthetic" else None })    
+        result_dict.update({"N": N})
+        result_dict.update({"k": k})
+        result_dict.update({"T": T})
+        result_dict.update({"dist": dist if data=="synthetic" else None })
         result_dict.update(params)
         result_dict.update({"regret_list": regret_list})
 
