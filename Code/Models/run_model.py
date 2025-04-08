@@ -53,3 +53,11 @@ def run_model(N: int, k: int, data:str, dist: Union[str, List[str]], params_list
             regret_list.append(regret)
             
         #------------------  Save Output ------------------#
+        result_dict = {}
+
+        result_dict.update({"dist": dist if data=="synthetic" else None })    
+        result_dict.update(params)
+        result_dict.update({"regret_list": regret_list})
+
+        header_str, value_str = dict_to_csv_strings(result_dict)
+        save_csv(result_addr, header_str, value_str)
