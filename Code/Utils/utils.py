@@ -16,6 +16,16 @@ def one_hot_encode(value: int, N: int) -> np.ndarray:
     return one_hot
 
 
+def safe_get(d: dict, key, default):
+    """
+    Safer dict.get() that also treats None values as missing.
+    Returns the value from dict if present and not None, else default.
+    """
+    val = d.get(key, default)
+    return val if val is not None else default
+
+
+
 def pretty_print_dict(d: dict):
     max_key_len = max(len(str(k)) for k in d.keys())
     for key, value in d.items():

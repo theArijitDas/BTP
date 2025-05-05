@@ -48,8 +48,11 @@ if __name__ == "__main__":
     parser.add_argument("--eta", nargs='+', default=None, type=float,
                         help="Learning rate (perturbation factor)")
     
-    parser.add_argument("--feature_extraction", nargs='+', default=None, type=str, choices=["sparse_pca", "pca"],
+    parser.add_argument("--feature_extraction", nargs='+', default=None, type=str, choices=["modified_spca", "sparse_pca", "pca"],
                         help="Which method to use to get probability vector")
+    
+    parser.add_argument("--sampling", nargs='+', default=None, type=str, choices=["madow", "top_k"],
+                        help="Which method to use to sample cache vector from probability vector")
     
     parser.add_argument("--sample_gamma_once", nargs='+', default=None, type=bool,
                         help="Whether to sample gamma once before each epoch or at every instance")
@@ -77,8 +80,9 @@ if __name__ == "__main__":
     # Hyperparameters (optional)
     eta                 = args.eta                if args.eta                 is not None else None
     feature_extraction  = args.feature_extraction if args.feature_extraction  is not None else None
+    sampling            = args.sampling           if args.sampling            is not None else None
     sample_gamma_once   = args.sample_gamma_once  if args.sample_gamma_once   is not None else None
-
+    
 
     #--------------- Seed Everything ---------------#
     seed_everything(seed=seed)
@@ -87,6 +91,7 @@ if __name__ == "__main__":
     params_list = get_params_list(model_name            = model_name,
                                   eta                   = eta,
                                   feature_extraction    = feature_extraction,
+                                  sampling              = sampling,
                                   sample_gamma_once     = sample_gamma_once)
 
 
